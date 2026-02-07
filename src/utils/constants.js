@@ -26,7 +26,9 @@ export const AvailableSystemRoles = Object.values(SystemRoleEnum)
 export const DocumentCategoryEnum = {
     APPROVAL: "APPROVAL",
     SAFETY: "SAFETY",
-    REIMBURSEMENT: "REIMBURSEMENT"
+    REIMBURSEMENT: "REIMBURSEMENT",
+    PRICING: "PRICING",
+    HTA: "HTA"
 }
 
 export const AvailableDocumentCategories = Object.values(DocumentCategoryEnum)

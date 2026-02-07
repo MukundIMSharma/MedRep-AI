@@ -2,7 +2,8 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { HuggingFaceInferenceEmbeddings } from "@langchain/community/embeddings/hf";
 import fs from "fs";
-import { DocumentCategoryEnum } from "../utils/constants.js";
+import { DocumentCategoryEnum, DataSourceTypeEnum } from "../utils/constants.js";
+import { Document } from "@langchain/core/documents";
 
 /**
  * Creates embeddings instance using HuggingFace
@@ -42,7 +43,10 @@ export async function indexDocument(filepath, collectionName, metadata = {}) {
             ...doc.metadata,
             source: metadata.source || "Unknown",
             category: metadata.category || "GENERAL",
-            documentName: metadata.name || "Unnamed Document"
+            documentName: metadata.name || "Unnamed Document",
+            sourceType: metadata.sourceType || DataSourceTypeEnum.UPLOADED,
+            sourceUrl: metadata.sourceUrl || "",
+            siteName: metadata.siteName || ""
         }
     }));
 
@@ -143,4 +147,39 @@ export async function getCollectionsByCategory(category) {
     return data.result.collections
         .map(c => c.name)
         .filter(name => name.startsWith(prefix));
+}
+
+/**
+ * Index raw text content into Qdrant
+ * @param {string} text - The text content to index
+ * @param {string} collectionName - Name for the Qdrant collection
+ * @param {Object} metadata - Metadata (source, category, sourceType, etc.)
+ * @returns {Promise<{success: boolean, documentCount: number, collectionName: string}>}
+ */
+export async function indexTextContent(text, collectionName, metadata = {}) {
+    const doc = new Document({
+        pageContent: text,
+        metadata: {
+            source: metadata.source || "Unknown",
+            category: metadata.category || "GENERAL",
+            documentName: metadata.name || "Scraped Content",
+            sourceType: metadata.sourceType || DataSourceTypeEnum.SCRAPED,
+            sourceUrl: metadata.sourceUrl || "",
+            siteName: metadata.siteName || ""
+        }
+    });
+
+    const embeddings = getEmbeddings();
+    const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
+
+    await QdrantVectorStore.fromDocuments([doc], embeddings, {
+        url: qdrantUrl,
+        collectionName: collectionName,
+    });
+
+    return {
+        success: true,
+        documentCount: 1,
+        collectionName: collectionName,
+    };
 }
