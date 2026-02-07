@@ -21,7 +21,7 @@ interface Document {
   name: string;
   category: string;
   source: string;
-  uploadedAt: string;
+  createdAt: string;
   fileSize?: number;
 }
 
@@ -78,7 +78,7 @@ export default function AdminDocuments() {
   };
 
   const filteredDocuments = documents.filter((doc) =>
-    doc.name.toLowerCase().includes(search.toLowerCase())
+    (doc.name || "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -123,11 +123,10 @@ export default function AdminDocuments() {
                         <button
                           key={cat}
                           onClick={() => setFilter(cat)}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                            filter === cat
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                          }`}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${filter === cat
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                            }`}
                         >
                           {cat}
                         </button>
@@ -217,7 +216,7 @@ export default function AdminDocuments() {
                           </td>
                           <td className="px-4 py-4 hidden md:table-cell">
                             <span className="text-sm text-muted-foreground">
-                              {new Date(doc.uploadedAt).toLocaleDateString()}
+                              {new Date(doc.createdAt).toLocaleDateString()}
                             </span>
                           </td>
                           <td className="px-4 py-4 text-right">

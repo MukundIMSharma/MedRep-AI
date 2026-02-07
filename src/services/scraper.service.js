@@ -50,11 +50,11 @@ export async function runScrapingPipeline() {
             console.log(`Scraper ${scraperName} found ${scrapedData.length} items`);
 
             // Limit the number of items processed to save storage (User Request)
-            const MAX_ITEMS_PER_SOURCE = 30;
+            const MAX_ITEMS_PER_SOURCE = 100;
             const itemsToProcess = scrapedData.slice(0, MAX_ITEMS_PER_SOURCE);
 
             if (itemsToProcess.length < scrapedData.length) {
-                console.log(`⚠️ Limiting ${scraperName} to top ${MAX_ITEMS_PER_SOURCE} items (Storage Optimization).`);
+                console.log(`⚠️ Limiting ${scraperName} to top ${MAX_ITEMS_PER_SOURCE} items (User Requested Limit).`);
             }
 
             for (const item of itemsToProcess) {
@@ -86,7 +86,7 @@ export async function runScrapingPipeline() {
                             source: item.metadata.source,
                             sourceType: item.metadata.sourceType,
                             sourceUrl: item.sourceUrl,
-                            description: item.content.substring(0, 500), // Increased length
+                            description: item.content.substring(0, 1000), // Increased length to 1000
                             uploadedBy: "67a7767379994b18bbd6b789", // Placeholder
                             metadata: enrichedMetadata
                         });

@@ -2,9 +2,8 @@ import * as cheerio from "cheerio";
 import { BaseScraper, cleanText } from "../scraper.utils.js";
 import { DocumentCategoryEnum, DataSourceTypeEnum } from "../constants.js";
 
-// GIPSA PPN details are often hosted on TPA sites or specific GIPSA portals. 
-// Using National Insurance Company's PPN page as a reliable proxy for GIPSA PPN list
-const GIPSA_URL = "https://nationalinsurance.nic.co.in/en/ppn-hospital-network";
+// Using NIC Circulars as they are the leads for GIPSA PPN in many zones and keep list updates public
+const GIPSA_URL = "https://nationalinsurance.nic.co.in/en/circulars";
 
 export class GipsaScraper extends BaseScraper {
     constructor() {
@@ -18,30 +17,28 @@ export class GipsaScraper extends BaseScraper {
             const $ = cheerio.load(html);
             const results = [];
 
-            // Scrape accessible text about PPN or links to PPN lists
-            $(".node-content p, .region-content li, table tr").each((_, el) => {
+            // Scrape circulars table for PPN or Rate related updates
+            $("table tr").each((_, el) => {
                 const text = cleanText($(el).text());
 
-                if (text && text.length > 50 && (text.toLowerCase().includes("ppn") || text.toLowerCase().includes("package") || text.toLowerCase().includes("rate"))) {
-                    // Check for PDF links to actual rate cards
+                if (text && text.length > 20 && (text.toLowerCase().includes("ppn") || text.toLowerCase().includes("rate") || text.toLowerCase().includes("hospital"))) {
                     const link = $(el).find('a').attr('href');
-                    const fullLink = link ? (link.startsWith("http") ? link : new URL(link, "https://uiic.co.in").href) : this.baseUrl;
+                    const fullLink = link ? (link.startsWith("http") ? link : new URL(link, "https://nationalinsurance.nic.co.in").href) : this.baseUrl;
 
-                    if (!results.some(r => r.content.includes(text.substring(0, 30)))) {
-                        results.push({
-                            title: `GIPSA PPN Info: ${text.substring(0, 50)}...`,
-                            content: `GIPSA PPN Guideline: ${text}\nLink: ${fullLink}\nSource: Public Sector General Insurance (UIIC/GIPSA)`,
-                            sourceUrl: fullLink,
-                            metadata: {
-                                category: this.category,
-                                sourceType: DataSourceTypeEnum.SCRAPED,
-                                siteName: "GIPSA/UIIC",
-                                source: "Public Sector General Insurance (GIPSA)",
-                                name: "PPN Guideline",
-                                externalLink: fullLink
-                            }
-                        });
-                    }
+                    const title = text.split("\n")[0].trim().substring(0, 100);
+
+                    results.push({
+                        title: `GIPSA/NIC Update: ${title}`,
+                        content: `Update: ${text}\nLink: ${fullLink}\nSource: National Insurance (GIPSA)`,
+                        sourceUrl: fullLink,
+                        metadata: {
+                            category: this.category,
+                            sourceType: DataSourceTypeEnum.SCRAPED,
+                            siteName: "NIC/GIPSA",
+                            source: "National Insurance General Insurance (GIPSA)",
+                            name: title
+                        }
+                    });
                 }
             });
 

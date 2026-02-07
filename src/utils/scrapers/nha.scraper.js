@@ -3,8 +3,8 @@ import { BaseScraper, cleanText } from "../scraper.utils.js";
 import { DocumentCategoryEnum, DataSourceTypeEnum } from "../constants.js";
 
 const NHA_BASE_URL = "https://nha.gov.in";
-// Switching to PMJAY specific text content which is often more reliable
-const NHA_PMJAY_URL = "https://pmjay.gov.in/about/pmjay";
+// Official About page with scheme details (verified)
+const NHA_PMJAY_URL = "https://pmjay.gov.in/about-pmjay";
 
 export class NhaScraper extends BaseScraper {
     constructor() {
@@ -18,24 +18,31 @@ export class NhaScraper extends BaseScraper {
             const $ = cheerio.load(html);
             const results = [];
 
-            // Targeting cards or content sections often found on NHA pages
-            $(".pm-jay-card, .abt-pmjay p, .pm-jay-text p").each((_, el) => {
+            // Targeting headers and content sections on the verified about page
+            $(".about-pmjay-sec h2, .about-pmjay-sec h3, .about-pmjay-sec p, .pmjay-benefit p, .content-area p, .entry-content p").each((_, el) => {
                 const text = cleanText($(el).text());
 
-                if (text.length > 50 && (text.includes("cover") || text.includes("family") || text.includes("hospital") || text.includes("benefit"))) {
+                if (text.length > 30 && (
+                    text.toLowerCase().includes("lakh") ||
+                    text.toLowerCase().includes("family") ||
+                    text.toLowerCase().includes("cover") ||
+                    text.toLowerCase().includes("benefit") ||
+                    text.toLowerCase().includes("secondary") ||
+                    text.toLowerCase().includes("tertiary")
+                )) {
 
-                    // Avoid distinct duplicates
-                    if (!results.some(r => r.content.includes(text.substring(0, 30)))) {
+                    // Avoid duplicates in the same run
+                    if (!results.some(r => r.content.includes(text.substring(0, 40)))) {
                         results.push({
-                            title: `Ayushman Bharat Scheme Details`,
-                            content: `Scheme Info: ${text}\nSource: National Health Authority`,
+                            title: `Ayushman Bharat (PM-JAY) Info: ${text.substring(0, 60)}...`,
+                            content: `Scheme Detail: ${text}\nSource: PM-JAY Official Portal`,
                             sourceUrl: this.baseUrl,
                             metadata: {
                                 category: this.category,
                                 sourceType: DataSourceTypeEnum.SCRAPED,
-                                siteName: "NHA",
+                                siteName: "NHA-PMJAY",
                                 source: "National Health Authority",
-                                name: "Ayushman Bharat Info"
+                                name: "PM-JAY Scheme Info"
                             }
                         });
                     }

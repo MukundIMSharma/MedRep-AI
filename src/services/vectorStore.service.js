@@ -4,21 +4,37 @@ import { HuggingFaceInferenceEmbeddings } from "@langchain/community/embeddings/
 import fs from "fs";
 import { DocumentCategoryEnum, DataSourceTypeEnum } from "../utils/constants.js";
 import { Document } from "@langchain/core/documents";
+import { embedSparse } from "./sparseEmbedder.service.js";
 
 /**
- * Creates embeddings instance using HuggingFace
+ * Wrapper for Sparse Embeddings for LangChain compatibility
+ */
+class SimpleSparseEmbeddings {
+    async embedQuery(query) {
+        return embedSparse(query);
+    }
+    async embedDocuments(documents) {
+        return documents.map(doc => embedSparse(doc));
+    }
+}
+
+let embeddingsInstance = null;
+
+/**
+ * Creates embeddings instance using HuggingFace (Singleton)
  * @returns {HuggingFaceInferenceEmbeddings}
  */
 function getEmbeddings() {
-    if (!process.env.HF_TOKEN) {
-        console.error("❌ Stats: HF_TOKEN is missing from environment variables!");
-    } else {
-        // console.log("✅ HF_TOKEN is loaded (Length: " + process.env.HF_TOKEN.length + ")");
+    if (!embeddingsInstance) {
+        if (!process.env.HF_TOKEN) {
+            console.error("❌ Stats: HF_TOKEN is missing from environment variables!");
+        }
+        embeddingsInstance = new HuggingFaceInferenceEmbeddings({
+            apiKey: process.env.HF_TOKEN,
+            model: "BAAI/bge-base-en-v1.5",
+        });
     }
-    return new HuggingFaceInferenceEmbeddings({
-        apiKey: process.env.HF_TOKEN,
-        model: "sentence-transformers/embeddinggemma-300m-medical", // Switching to more reliable free-tier model
-    });
+    return embeddingsInstance;
 }
 
 /**
@@ -64,10 +80,17 @@ export async function indexDocument(filepath, collectionName, metadata = {}) {
     const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
     const qdrantApiKey = process.env.QDRANT_API_KEY;
 
+    // Note: LangChain's QdrantVectorStore.fromDocuments uses dense embeddings by default.
+    // For hybrid search to work, we need to ensure the collection supports it.
+    // Since the user is configuring the cluster manually, we assume 'sparse' vector is enabled.
+
     await QdrantVectorStore.fromDocuments(enrichedDocs, embeddings, {
         url: qdrantUrl,
-        apiKey: qdrantApiKey, // Added API Key
+        apiKey: qdrantApiKey,
         collectionName: collectionName,
+        vectorName: process.env.QDRANT_VECTOR_NAME || undefined, // Support named dense vectors
+        sparseEmbeddings: new SimpleSparseEmbeddings(),
+        sparseVectorName: "sparse"
     });
 
     // Clean up the uploaded file after indexing
@@ -187,11 +210,22 @@ export async function indexTextContent(text, collectionName, metadata = {}) {
     const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
     const qdrantApiKey = process.env.QDRANT_API_KEY;
 
-    await QdrantVectorStore.fromDocuments([doc], embeddings, {
-        url: qdrantUrl,
-        apiKey: qdrantApiKey,
-        collectionName: collectionName,
-    });
+    try {
+        await QdrantVectorStore.fromDocuments([doc], embeddings, {
+            url: qdrantUrl,
+            apiKey: qdrantApiKey,
+            collectionName: collectionName,
+            vectorName: process.env.QDRANT_VECTOR_NAME || undefined, // Support named dense vectors
+            sparseEmbeddings: new SimpleSparseEmbeddings(),
+            sparseVectorName: "sparse"
+        });
+    } catch (error) {
+        if (error.message.includes("Not existing vector name") || error.message.includes("400")) {
+            console.error(`\n❌ Qdrant Schema Error in "${collectionName}": The collection might be missing 'sparse' vector configuration.`);
+            console.error(`👉 ACTION REQUIRED: Please DELETE the collection "${collectionName}" in Qdrant Cloud and run the pipeline again to recreate it with the correct Hybrid Search schema.`);
+        }
+        throw error;
+    }
 
     return {
         success: true,
