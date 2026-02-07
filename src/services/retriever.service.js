@@ -26,10 +26,19 @@ function formatChunks(chunks) {
             const source = chunk.metadata?.source || "Unknown Source";
             const page = chunk.metadata?.loc?.pageNumber ?? "unknown";
             const docName = chunk.metadata?.documentName || "Document";
+            const siteName = chunk.metadata?.siteName;
+            const sourceType = chunk.metadata?.sourceType;
+            const sourceUrl = chunk.metadata?.sourceUrl;
+
+            let sourceInfo = `Document: ${docName}`;
+            if (sourceType === "SCRAPED" && siteName) {
+                sourceInfo = `Source: Scraped from ${siteName} (${sourceUrl})`;
+            }
+
             return `
 [Source ${i + 1}]
-Document: ${docName}
-Source: ${source}
+${sourceInfo}
+Source Type: ${sourceType || "UPLOADED"}
 Page: ${page}
 Content:
 ${chunk.pageContent}
@@ -48,7 +57,8 @@ STRICT RULES - YOU MUST FOLLOW THESE EXACTLY:
 1. ONLY use information from the SOURCES provided below
 2. If no relevant information is found in the sources, respond EXACTLY with:
    "Information not found in verified Indian sources. Please consult official CDSCO or healthcare provider resources."
-3. EVERY factual statement MUST include a citation in format: [Source: Document Name, Page: X]
+3. EVERY factual statement MUST include a citation in format: [Source: Document Name, Page: X].
+   - If the data is scraped, cite as: [Source: Scraped from <site_name>, URL: <url>]
 4. You provide FACTUAL INFORMATION ONLY - never provide medical advice or recommendations
 5. Be concise and structured in your responses
 6. If asked about something outside drug information/reimbursement, politely redirect

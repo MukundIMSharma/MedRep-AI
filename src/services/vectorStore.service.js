@@ -2,33 +2,44 @@ import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { HuggingFaceInferenceEmbeddings } from "@langchain/community/embeddings/hf";
 import fs from "fs";
-import { DocumentCategoryEnum } from "../utils/constants.js";
+import { DocumentCategoryEnum, DataSourceTypeEnum } from "../utils/constants.js";
+import { Document } from "@langchain/core/documents";
 
 /**
  * Creates embeddings instance using HuggingFace
  * @returns {HuggingFaceInferenceEmbeddings}
  */
 function getEmbeddings() {
+    if (!process.env.HF_TOKEN) {
+        console.error("❌ Stats: HF_TOKEN is missing from environment variables!");
+    } else {
+        // console.log("✅ HF_TOKEN is loaded (Length: " + process.env.HF_TOKEN.length + ")");
+    }
     return new HuggingFaceInferenceEmbeddings({
         apiKey: process.env.HF_TOKEN,
-        model: "BAAI/bge-base-en-v1.5",
+        model: "sentence-transformers/embeddinggemma-300m-medical", // Switching to more reliable free-tier model
     });
 }
 
 /**
  * Generate a collection name for medical documents
- * @param {string} category - Document category (APPROVAL/SAFETY/REIMBURSEMENT)
+ * Uses env var QDRANT_COLLECTION if set, or generates based on category.
+ * @param {string} category - Document category
  * @returns {string}
  */
 export function generateCollectionName(category) {
-    return `medical-${category.toLowerCase()}-${Date.now()}`;
+    if (process.env.QDRANT_COLLECTION) {
+        return process.env.QDRANT_COLLECTION;
+    }
+    // Default to category-based collections if no single collection is defined
+    return `medical-${category.toLowerCase()}`; // Removed Date.now() to group docs by category
 }
 
 /**
  * Index a single PDF document into Qdrant vector store
  * @param {string} filepath - Path to the PDF file
  * @param {string} collectionName - Name for the Qdrant collection
- * @param {Object} metadata - Additional metadata (source, category)
+ * @param {Object} metadata - Additional metadata
  * @returns {Promise<{success: boolean, documentCount: number, collectionName: string}>}
  */
 export async function indexDocument(filepath, collectionName, metadata = {}) {
@@ -42,20 +53,27 @@ export async function indexDocument(filepath, collectionName, metadata = {}) {
             ...doc.metadata,
             source: metadata.source || "Unknown",
             category: metadata.category || "GENERAL",
-            documentName: metadata.name || "Unnamed Document"
+            documentName: metadata.name || "Unnamed Document",
+            sourceType: metadata.sourceType || DataSourceTypeEnum.UPLOADED,
+            sourceUrl: metadata.sourceUrl || "",
+            siteName: metadata.siteName || ""
         }
     }));
 
     const embeddings = getEmbeddings();
     const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
+    const qdrantApiKey = process.env.QDRANT_API_KEY;
 
     await QdrantVectorStore.fromDocuments(enrichedDocs, embeddings, {
         url: qdrantUrl,
+        apiKey: qdrantApiKey, // Added API Key
         collectionName: collectionName,
     });
 
     // Clean up the uploaded file after indexing
-    fs.unlinkSync(filepath);
+    if (fs.existsSync(filepath)) {
+        fs.unlinkSync(filepath);
+    }
 
     return {
         success: true,
@@ -143,4 +161,41 @@ export async function getCollectionsByCategory(category) {
     return data.result.collections
         .map(c => c.name)
         .filter(name => name.startsWith(prefix));
+}
+
+/**
+ * Index raw text content into Qdrant
+ * @param {string} text - The text content to index
+ * @param {string} collectionName - Name for the Qdrant collection
+ * @param {Object} metadata - Metadata (source, category, sourceType, etc.)
+ * @returns {Promise<{success: boolean, documentCount: number, collectionName: string}>}
+ */
+export async function indexTextContent(text, collectionName, metadata = {}) {
+    const doc = new Document({
+        pageContent: text,
+        metadata: {
+            source: metadata.source || "Unknown",
+            category: metadata.category || "GENERAL",
+            documentName: metadata.name || "Scraped Content",
+            sourceType: metadata.sourceType || DataSourceTypeEnum.SCRAPED,
+            sourceUrl: metadata.sourceUrl || "",
+            siteName: metadata.siteName || ""
+        }
+    });
+
+    const embeddings = getEmbeddings();
+    const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
+    const qdrantApiKey = process.env.QDRANT_API_KEY;
+
+    await QdrantVectorStore.fromDocuments([doc], embeddings, {
+        url: qdrantUrl,
+        apiKey: qdrantApiKey,
+        collectionName: collectionName,
+    });
+
+    return {
+        success: true,
+        documentCount: 1,
+        collectionName: collectionName,
+    };
 }

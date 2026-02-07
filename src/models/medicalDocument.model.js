@@ -1,5 +1,10 @@
 import mongoose, { Schema } from "mongoose";
-import { DocumentCategoryEnum, AvailableDocumentCategories } from "../utils/constants.js";
+import {
+    DocumentCategoryEnum,
+    AvailableDocumentCategories,
+    DataSourceTypeEnum,
+    AvailableDataSourceTypes
+} from "../utils/constants.js";
 
 const medicalDocumentSchema = new Schema({
     name: {
@@ -15,12 +20,21 @@ const medicalDocumentSchema = new Schema({
     collectionName: {
         type: String,
         required: true,
-        unique: true
+        // unique: true // Removed to allow multiple docs in same collection
     },
     source: {
         type: String,
         trim: true,
         default: "Unknown"
+    },
+    sourceType: {
+        type: String,
+        enum: AvailableDataSourceTypes,
+        default: DataSourceTypeEnum.UPLOADED
+    },
+    sourceUrl: {
+        type: String,
+        trim: true
     },
     description: {
         type: String,
