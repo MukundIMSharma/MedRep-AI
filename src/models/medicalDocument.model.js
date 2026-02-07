@@ -20,7 +20,7 @@ const medicalDocumentSchema = new Schema({
     collectionName: {
         type: String,
         required: true,
-        unique: true
+        // unique: true // Removed to allow multiple docs in same collection
     },
     source: {
         type: String,

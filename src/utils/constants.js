@@ -28,7 +28,21 @@ export const DocumentCategoryEnum = {
     SAFETY: "SAFETY",
     REIMBURSEMENT: "REIMBURSEMENT",
     PRICING: "PRICING",
-    HTA: "HTA"
+    HTA: "HTA",
+    TRIAL: "TRIAL",
+    GUIDELINE: "GUIDELINE",
+    LEGAL: "LEGAL",
+    BOOK: "BOOK",
+    RESEARCH: "RESEARCH"
 }
 
 export const AvailableDocumentCategories = Object.values(DocumentCategoryEnum)
+
+export const DataSourceTypeEnum = {
+    SCRAPED: "SCRAPED",
+    API: "API",
+    UPLOADED: "UPLOADED",
+    REFERENCE: "REFERENCE"
+}
+
+export const AvailableDataSourceTypes = Object.values(DataSourceTypeEnum)

@@ -1,47 +1,58 @@
 import * as cheerio from "cheerio";
-import { fetchHtml, cleanText } from "../scraper.utils.js";
+import { BaseScraper, cleanText } from "../scraper.utils.js";
 import { DocumentCategoryEnum, DataSourceTypeEnum } from "../constants.js";
 
-const NPPA_URL = "https://nppa.gov.in/ceiling-price-notifications/";
+const NPPA_BASE_URL = "https://nppa.gov.in";
+// Using homepage to catch marquee/latest updates
+const NPPA_HOME_URL = "https://nppa.gov.in";
 
-/**
- * Scrape NPPA Pricing Notifications
- * @returns {Promise<Array>}
- */
-export async function scrapeNppaPricing() {
-    console.log("Scraping NPPA Pricing...");
-    try {
-        const html = await fetchHtml(NPPA_URL);
-        const $ = cheerio.load(html);
-        const results = [];
+export class NppaScraper extends BaseScraper {
+    constructor() {
+        super("NPPA", NPPA_HOME_URL, DocumentCategoryEnum.PRICING);
+    }
 
-        $("table tr").each((i, el) => {
-            if (i === 0) return;
-            const cols = $(el).find("td");
-            if (cols.length >= 2) {
-                const drugName = cleanText($(cols[1]).text());
-                const priceMatch = cleanText($(cols[2]).text());
+    async scrape() {
+        this.log("Starting scrape...");
+        try {
+            // Fetch homepage or specific search page
+            const html = await this.fetch(this.baseUrl);
+            const $ = cheerio.load(html);
+            const results = [];
 
-                if (drugName) {
+            // Look for latest orders/notifications in marquee or specific lists
+            $(".marquee a, .list-group-item a, table tr a").each((_, el) => {
+                const text = cleanText($(el).text());
+                const link = $(el).attr('href');
+
+                if (text && text.length > 10 && (text.toLowerCase().includes("fixing") || text.toLowerCase().includes("ceiling") || text.toLowerCase().includes("retail price"))) {
+                    const fullLink = link ? (link.startsWith("http") ? link : new URL(link, this.baseUrl).href) : this.baseUrl;
+
                     results.push({
-                        title: `NPPA Ceiling Price: ${drugName}`,
-                        content: `Drug: ${drugName}\nCeiling Price Notification: ${priceMatch}`,
-                        sourceUrl: NPPA_URL,
+                        title: `NPPA Pricing: ${text.substring(0, 100)}...`,
+                        content: `Notification: ${text}\nLink: ${fullLink}\nSource: NPPA`,
+                        sourceUrl: fullLink,
                         metadata: {
-                            category: DocumentCategoryEnum.PRICING,
+                            category: this.category,
                             sourceType: DataSourceTypeEnum.SCRAPED,
                             siteName: "NPPA",
                             source: "National Pharmaceutical Pricing Authority",
-                            name: drugName
+                            name: "Price Notification",
+                            externalLink: fullLink
                         }
                     });
                 }
-            }
-        });
+            });
 
-        return results.slice(0, 5);
-    } catch (error) {
-        console.error("Error occurred while scraping from NPPA:", error.message);
-        return [];
+            this.log(`Found ${results.length} pricing notifications.`);
+            return results.slice(0, 10);
+        } catch (error) {
+            this.error("Failed to scrape NPPA", error);
+            return [];
+        }
     }
 }
+
+export const scrapeNppaPricing = async () => {
+    const scraper = new NppaScraper();
+    return scraper.scrape();
+};

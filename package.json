@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test:scrapers": "node src/scripts/test-scrapers.js",
+    "run:pipeline": "node src/scripts/run-pipeline.js"
   },
   "keywords": [
     "backend",

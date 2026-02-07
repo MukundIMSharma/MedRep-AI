@@ -1,53 +1,71 @@
+import { PDFLoader } from "@langchain/community/document_loaders/fs/pdf";
 import * as cheerio from "cheerio";
-import { fetchHtml, cleanText } from "../scraper.utils.js";
+import fs from "fs";
+import path from "path";
+import { BaseScraper, cleanText, downloadFile } from "../scraper.utils.js";
 import { DocumentCategoryEnum, DataSourceTypeEnum } from "../constants.js";
 
 const CDSCO_BASE_URL = "https://cdsco.gov.in";
-const NEW_DRUGS_URL = "https://cdsco.gov.in/opencms/opencms/en/Approval_and_Registration/Drugs/List-of-Approved-New-Drugs/";
+const NOTIFICATIONS_URL = "https://cdsco.gov.in/opencms/opencms/en/Notifications/Public-Notices/";
 
-/**
- * Scrape CDSCO Approved New Drugs list
- * @returns {Promise<Array<{title: string, content: string, sourceUrl: string, metadata: Object}>>}
- */
-export async function scrapeCdscoNewDrugs() {
-    console.log("Scraping CDSCO New Drugs...");
-    try {
-        const html = await fetchHtml(NEW_DRUGS_URL);
-        const $ = cheerio.load(html);
-        const results = [];
+export class CdscoScraper extends BaseScraper {
+    constructor() {
+        super("CDSCO", NOTIFICATIONS_URL, DocumentCategoryEnum.APPROVAL);
+    }
 
-        // Typically CDSCO has tables or lists of links to PDFs
-        // We'll scrape the main table rows or list items
-        $("table tr").each((i, el) => {
-            if (i === 0) return; // Skip header
+    async scrape() {
+        this.log("Starting scrape...");
+        try {
+            const html = await this.fetch(this.baseUrl);
+            const $ = cheerio.load(html);
+            const results = [];
 
-            const cols = $(el).find("td");
-            if (cols.length >= 2) {
-                const drugName = cleanText($(cols[1]).text());
-                const date = cleanText($(cols[2]).text());
-                const indication = cleanText($(cols[3]).text());
+            // Scrape table rows in the public notices section
+            $("table tr, .common-table tr").each((i, el) => {
+                if (i === 0) return; // Skip header
 
-                if (drugName) {
-                    results.push({
-                        title: `CDSCO Approval: ${drugName}`,
-                        content: `Drug Name: ${drugName}\nApproval Date: ${date}\nIndication: ${indication}`,
-                        sourceUrl: NEW_DRUGS_URL,
-                        metadata: {
-                            category: DocumentCategoryEnum.APPROVAL,
-                            sourceType: DataSourceTypeEnum.SCRAPED,
-                            siteName: "CDSCO",
-                            source: "CDSCO Official Portal",
-                            name: drugName
-                        }
-                    });
+                const cols = $(el).find("td");
+                if (cols.length >= 2) {
+                    // Adjust indices based on typical table: [S.No, Subject/Title, Date/File]
+                    // Sometimes columns vary, so checking content is key
+                    const col1 = cleanText($(cols[1]).text());
+                    const col2 = cleanText($(cols[2]).text());
+
+                    const subject = col1.length > 10 ? col1 : col2;
+                    const date = col1.length > 10 ? cleanText($(cols[2]).text()) || cleanText($(cols[0]).text()) : cleanText($(cols[3]).text());
+
+                    const link = $(el).find("a").attr("href");
+
+                    if (subject && subject.length > 5) {
+                        const fullLink = link ? (link.startsWith("http") ? link : new URL(link, CDSCO_BASE_URL).href) : this.baseUrl;
+
+                        results.push({
+                            title: `CDSCO Notice: ${subject.substring(0, 100)}...`,
+                            content: `Subject: ${subject}\nDate: ${date}\nLink: ${fullLink}\nSource: CDSCO Public Notices`,
+                            sourceUrl: fullLink,
+                            metadata: {
+                                category: this.category,
+                                sourceType: DataSourceTypeEnum.SCRAPED,
+                                siteName: "CDSCO",
+                                source: "CDSCO Official Portal",
+                                name: subject.substring(0, 50),
+                                notificationDate: date
+                            }
+                        });
+                    }
                 }
-            }
-        });
+            });
 
-        // Limit results for initial implementation
-        return results.slice(0, 5);
-    } catch (error) {
-        console.error("Error occurred while scraping from CDSCO:", error.message);
-        return [];
+            this.log(`Found ${results.length} new CDSCO notices.`);
+            return results;
+        } catch (error) {
+            this.error("Failed to scrape CDSCO", error);
+            return [];
+        }
     }
 }
+
+export const scrapeCdscoNewDrugs = async () => {
+    const scraper = new CdscoScraper();
+    return scraper.scrape();
+};

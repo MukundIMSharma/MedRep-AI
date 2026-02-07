@@ -1,41 +1,58 @@
 import * as cheerio from "cheerio";
-import { fetchHtml, cleanText } from "../scraper.utils.js";
+import { BaseScraper, cleanText } from "../scraper.utils.js";
 import { DocumentCategoryEnum, DataSourceTypeEnum } from "../constants.js";
 
-const HTAIN_URL = "https://htain.dhr.gov.in/published-reports/";
+// Switching to the main DHR link which is stable, as the subdomain often has DNS issues from external networks
+const HTAIN_URL = "https://dhr.gov.in/health-technology-assessment";
 
-/**
- * Scrape HTAIn Published Reports
- * @returns {Promise<Array>}
- */
-export async function scrapeHtainReports() {
-    console.log("Scraping HTAIn Reports...");
-    try {
-        const html = await fetchHtml(HTAIN_URL);
-        const $ = cheerio.load(html);
-        const results = [];
+export class HtainScraper extends BaseScraper {
+    constructor() {
+        super("HTAIn", HTAIN_URL, DocumentCategoryEnum.HTA);
+    }
 
-        $(".report-item, .entry-title").each((_, el) => {
-            const title = cleanText($(el).text());
-            if (title) {
-                results.push({
-                    title: `HTAIn Report: ${title}`,
-                    content: `Health Technology Assessment Report: ${title}`,
-                    sourceUrl: HTAIN_URL,
-                    metadata: {
-                        category: DocumentCategoryEnum.HTA,
-                        sourceType: DataSourceTypeEnum.SCRAPED,
-                        siteName: "HTAIn",
-                        source: "Health Technology Assessment in India",
-                        name: title
-                    }
-                });
-            }
-        });
+    async scrape() {
+        this.log("Starting scrape...");
+        try {
+            const html = await this.fetch(this.baseUrl);
+            const $ = cheerio.load(html);
+            const results = [];
 
-        return results.slice(0, 5);
-    } catch (error) {
-        console.error("Error occurred while scraping from HTAIn:", error.message);
-        return [];
+            // Scrape report list
+            $("table tr, .k2ItemsBlock li").each((_, el) => {
+                // Try multiple strategies
+                const linkEl = $(el).find("a");
+                const text = cleanText(linkEl.text()) || cleanText($(el).text());
+                const link = linkEl.attr('href');
+
+                if (text && text.length > 10 && (text.toLowerCase().includes("report") || text.toLowerCase().includes("assessment"))) {
+                    const fullLink = link ? (link.startsWith("http") ? link : new URL(link, "https://htain.icmr.org.in").href) : this.baseUrl;
+
+                    results.push({
+                        title: `HTAIn Report: ${text.substring(0, 100)}...`,
+                        content: `Report Title: ${text}\nLink: ${fullLink}\nSource: HTAIn`,
+                        sourceUrl: fullLink,
+                        metadata: {
+                            category: this.category,
+                            sourceType: DataSourceTypeEnum.SCRAPED,
+                            siteName: "HTAIn",
+                            source: "Health Technology Assessment in India",
+                            name: "HTA Study",
+                            reportUrl: fullLink
+                        }
+                    });
+                }
+            });
+
+            this.log(`Found ${results.length} HTA reports.`);
+            return results;
+        } catch (error) {
+            this.error("Failed to scrape HTAIn", error);
+            return [];
+        }
     }
 }
+
+export const scrapeHtainReports = async () => {
+    const scraper = new HtainScraper();
+    return scraper.scrape();
+};
