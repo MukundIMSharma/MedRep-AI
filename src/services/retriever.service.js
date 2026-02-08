@@ -4,6 +4,7 @@ import { HuggingFaceInferenceEmbeddings } from "@langchain/community/embeddings/
 import { classifyQuery } from "./queryClassifier.service.js";
 import { MedicalDocument } from "../models/medicalDocument.model.js";
 import { embedSparse } from "./sparseEmbedder.service.js";
+import { redactPII } from "../utils/guardrails.js";
 
 let embeddingsInstance = null;
 let inferenceClient = null;
@@ -98,6 +99,8 @@ CONTENT GUIDELINES (DEPTH & QUALITY):
 3. **Citation Protocol**: Every factual claim must cite its origin. 
    - Format: [Source: <site_name>, URL: <url>]
 
+4. **SAFETY & PRIVACY**: If you encounter [REDACTED_XXX] markers in the query, DO NOT attempt to guess the redacted value. Respect the privacy of the user and focus only on the clinical inquiry.
+
 SUGGESTED FOLLOW-UPS:
 At the very end of your response, after the SOURCE section, provide 3 suggested follow-up questions tailored to the clinical context.
 Format:
@@ -129,12 +132,13 @@ STRUCTURE YOUR RESPONSE AS (EXAMPLE):
  * @returns {Promise<Object>} Response with answer, sources, and classification
  */
 export async function chat(query, collectionName = null) {
+    const sanitizedQuery = redactPII(query);
     const client = getInferenceClient();
     const embeddings = getEmbeddings();
     const qdrantUrl = process.env.QDRANT_URL || "http://localhost:6333";
 
     // Classify query to determine which categories to search
-    const classification = classifyQuery(query);
+    const classification = classifyQuery(sanitizedQuery);
 
     let allChunks = [];
     let searchedCollections = [];
@@ -153,7 +157,7 @@ export async function chat(query, collectionName = null) {
 
     if (searchedCollections.length > 0) {
         // Pre-compute query embedding once to save time and API calls
-        const queryVector = await embeddings.embedQuery(query);
+        const queryVector = await embeddings.embedQuery(sanitizedQuery);
 
         // Search all relevant collections in parallel
         const searchPromises = searchedCollections.map(async (collName) => {
@@ -212,7 +216,7 @@ export async function chat(query, collectionName = null) {
             },
             {
                 role: "user",
-                content: query,
+                content: sanitizedQuery,
             },
         ],
     });
