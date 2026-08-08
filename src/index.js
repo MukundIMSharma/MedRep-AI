@@ -7,16 +7,14 @@ import connectdb from "./db/index.js";
 
 const port = process.env.PORT || 3000;
 
+app.listen(port, "0.0.0.0", () => {
+    console.log(`App listening on port ${port}`);
+});
+
 connectdb()
-    .then(() => {
-        app.listen(port, () => {
-            console.log(`App listening on http://localhost:${port}`);
-        });
-    })
     .catch((err) => {
-        console.error("MongoDB connection error", err);
-        process.exit(1);
-    })
+        console.error("Server is running, but database features are unavailable", err.message);
+    });
 
 
 

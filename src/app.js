@@ -2,15 +2,20 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import fs from "node:fs";
 import { ApiError } from "./utils/api-error.js";
 dotenv.config();
 
 const app = express();
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const clientDist = path.resolve(currentDir, "../client/dist");
 
 // Basic config
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(express.static("public"));
+app.use("/public", express.static("public"));
 
 // CORS config (trim; strip trailing slashes so https://app.vercel.app matches browser Origin)
 const corsOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
@@ -39,9 +44,19 @@ app.use("/api/v1/projects", projectRouter);
 app.use("/api/v1/rag", ragRouter);
 app.use("/api/v1/scraper", scraperRouter);
 
-app.get("/", (req, res) => {
-    res.send("This is Holy SHiiii.....");
-});
+if (fs.existsSync(clientDist)) {
+    app.use(express.static(clientDist));
+    app.use((req, res, next) => {
+        if (req.method === "GET" && !req.path.startsWith("/api/")) {
+            return res.sendFile(path.join(clientDist, "index.html"));
+        }
+        next();
+    });
+} else {
+    app.get("/", (req, res) => {
+        res.json({ service: "MedRep AI API", status: "running" });
+    });
+}
 
 // global error handler
 app.use((err, req, res, next) => {
